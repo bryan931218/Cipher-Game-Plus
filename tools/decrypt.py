@@ -75,4 +75,4 @@ result = decrypt_password(data)
 
 if not(result):
     print("\033[91m" + "\n解密失敗，請檢查輸入是否正確。" + "\033[0m")
-    os.system("pause")
+os.system("pause")
