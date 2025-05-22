@@ -20,11 +20,20 @@ def slow_print(text, delay=0.03):
         time.sleep(delay)
     print()
 
-def decrypt_message(password: str, data: dict):
+def decrypt_message(password: str, data: dict, verbose=False):
     try:
         salt = base64.b64decode(data['salt'])
         nonce = base64.b64decode(data['nonce'])
         ciphertext = base64.b64decode(data['ciphertext'])
+
+        if verbose:
+            print("\n[步驟1] 密碼輸入：", password)
+            print("[步驟2] 解碼 salt (Base64)：", data['salt'])
+            print("         salt (bytes)：", salt.hex())
+            print("[步驟3] 解碼 nonce (Base64)：", data['nonce'])
+            print("         nonce (bytes)：", nonce.hex())
+            print("[步驟4] 解碼密文 (Base64)：", data['ciphertext'])
+            print("         密文 (bytes)：", ciphertext.hex())
 
         kdf = PBKDF2HMAC(
             algorithm=hashes.SHA256(),
@@ -34,10 +43,20 @@ def decrypt_message(password: str, data: dict):
             backend=None
         )
         key = kdf.derive(password.encode())
+        if verbose:
+            print("[步驟5] 用 PBKDF2 衍生金鑰 (SHA256, 100,000 次)：")
+            print("         金鑰 (bytes)：", key.hex())
+            print("         金鑰 (Base64)：", base64.b64encode(key).decode())
+
         aesgcm = AESGCM(key)
         plaintext = aesgcm.decrypt(nonce, ciphertext, None)
+        if verbose:
+            print("[步驟6] 用 AES-GCM 解密...")
+            print("         明文：", plaintext.decode())
         return plaintext.decode()
-    except Exception:
+    except Exception as e:
+        if verbose:
+            print("[錯誤] 解密失敗：", str(e))
         return None
 
 def verify_signature(public_key_pem: str, message: str, signature_b64: str) -> bool:
@@ -77,10 +96,10 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
     challenge = json.loads(data2.decode())
     slow_print("\n🧩 解密挑戰已收到，準備解碼關鍵訊息...\n")
 
-    # Step 2: 玩家輸入密碼解密
+    # Step 2: 玩家輸入密碼解密（顯示詳細運算過程）
     while True:
         pwd = input("🔑 請輸入密碼以解密關鍵內容：")
-        decrypted = decrypt_message(pwd, challenge)
+        decrypted = decrypt_message(pwd, challenge, verbose=True)
         if decrypted:
             slow_print("\n✅ 成功解密！取得公開金鑰如下：\n")
             print(decrypted)
