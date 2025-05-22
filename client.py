@@ -4,6 +4,7 @@ import base64
 import sys
 import time
 import os
+import shutil
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
@@ -55,6 +56,19 @@ def animate_progress(duration=1.0):
         time.sleep(duration/100)
     print()
 
+def clean_cert_directory():
+    cert_dir = "tools/certs"
+    if os.path.exists(cert_dir):
+        for file in os.listdir(cert_dir):
+            file_path = os.path.join(cert_dir, file)
+            try:
+                if os.path.isfile(file_path):
+                    os.remove(file_path)
+            except Exception as e:
+                print(f"無法刪除文件 {file_path}: {e}")
+    else:
+        os.makedirs(cert_dir)
+
 def display_available_tools():
     print_subtitle("可用工具列表")
     try:
@@ -69,8 +83,8 @@ def display_available_tools():
                             print_hint(f"     - 用於解密第一關提示，獲取密碼")
                         elif tool == "kms_client.py":
                             print_hint(f"     - 用於連接 KMS 服務，獲取解密金鑰")
-                        elif tool == "cert_forge.py":
-                            print_hint(f"     - 用於創建和偽造 X.509 憑證鏈")
+                        elif tool == "cert_creator.py":
+                            print_hint(f"     - 用於創建和管理 X.509 憑證")
                     elif tool.endswith(".sh"):
                         print_tool_info(f"  {i}. {tool} - Shell 腳本")
                     else:
@@ -199,24 +213,24 @@ def decrypt_aes_gcm(key: bytes, nonce: bytes, ciphertext: bytes) -> str:
 def run_kms_client():
     """執行 KMS 客戶端工具"""
     print_subtitle("執行 KMS 客戶端工具")
-    print_hint("請使用另一個終端視窗執行以下命令：")
-    print_tool_info(f"  python tools/kms_client.py")
-    print_hint("\n執行後，請提供有效的用戶名和令牌。")
-    print_hint("獲取 AES 金鑰後，請記下金鑰的 Base64 值，以便在這裡輸入。")
+    print_hint("請使用kms_client.py並提供有效的用戶名和token來獲取AES金鑰：")
+    print_hint("獲取金鑰後，請記下金鑰的 Base64 值，以便在這裡輸入。")
 
-def run_cert_forge_tool():
-    """執行憑證鏈偽造工具"""
-    print_subtitle("執行憑證鏈偽造工具")
-    print_hint("請使用另一個終端視窗執行以下命令：")
-    print_tool_info(f"  python tools/cert_forge.py")
-    print_hint("\n執行後，工具將幫助你：")
-    print_hint("1. 獲取根CA憑證和私鑰")
-    print_hint("2. 創建中繼CA憑證")
-    print_hint("3. 創建用戶憑證")
-    print_hint("4. 提交完整的憑證鏈給服務器驗證")
+def run_cert_creator():
+    """執行憑證創建工具"""
+    print_subtitle("執行憑證創建工具")
+    print_hint("請使用cert_creator.py來創建憑證鏈：")
+    print_hint("完成後，工具會在 tools/certs 資料夾中生成三個 PEM 文件：根 CA、中繼 CA 和用戶憑證。")
+
+def ensure_cert_directory():
+    cert_dir = "tools/certs"
+    if not os.path.exists(cert_dir):
+        os.makedirs(cert_dir)
+    return cert_dir
 
 # === Game Start ===
 clear()
+clean_cert_directory()
 print_title("密碼挑戰：解鎖真相")
 
 slow_print("🔐 歡迎來到《密碼挑戰：解鎖真相》", 0.05)
@@ -253,7 +267,7 @@ try:
     
     print_subtitle("任務提示內容")
     print(json.dumps(plain, indent=2, ensure_ascii=False))
-    print_hint("\n這看起來像是一個加密的任務簡報。根據提示，日期似乎是解密的關鍵。")
+    print_hint("\n這看起來像是一個加密的任務簡報，密碼似乎是一個特定的日期。。")
 
     s.sendall(b"player recieved the plaintext")
     data2 = s.recv(2048)
@@ -262,8 +276,6 @@ try:
     
     while True:
         print_subtitle("第一關：密碼解密")
-        print_hint("根據任務提示，密碼似乎是一個特定的日期。")
-        print_hint("格式可能是 YYYYMMDD (年月日)，例如 20230101。")
         pwd = input("\n🔑 請輸入密碼以解密公鑰：")
         
         decrypted = decrypt_message(pwd, challenge)
@@ -301,7 +313,6 @@ try:
         print_success("\n🛡️ 驗證成功！訊息確實來自可信的發送者，且未被篡改。")
         print_hint("\n訊息中提到了一個「混合加密系統」和「KMS服務」，這可能是下一關的線索。")
         
-        # === 第三關：混合加密與金鑰管理 ===
         print_title("進入第三關")
         slow_print("\n🔐 恭喜你通過前兩關挑戰！解密線索指向了第三關：混合加密與金鑰管理。", 0.03)
         slow_print("根據解密的訊息，我們需要連接到 KMS (金鑰管理服務) 來獲取解密金鑰。", 0.03)
@@ -309,7 +320,6 @@ try:
         
         input("\n按下 Enter 鍵連接到 KMS 服務...")
         
-        # 關閉舊連接並創建新連接，確保連接不會中斷
         s.close()
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         s.connect(("localhost", 12347))
@@ -361,8 +371,7 @@ try:
             final_message = decrypt_aes_gcm(aes_key, nonce, ciphertext)
             
             if final_message:
-                print_title("任務完成")
-                print_success("\n🎉 恭喜！你成功解密了最終訊息：")
+                print_success("\n✅ 成功解密訊息！")
                 print("\n" + final_message)
                 
                 # 關閉舊連接並創建新連接，確保連接不會中斷
@@ -373,84 +382,239 @@ try:
                 # 向服務器驗證解密結果
                 print("\n正在向總部確認解密結果...")
                 
-                # 修正：先發送命令，然後等待服務器回應，再發送解密結果
+                # 修改這裡：先發送命令，然後等待服務器準備好接收數據的確認
                 s.sendall(b"VERIFY_FINAL_SOLUTION")
                 
-                # 等待一小段時間，確保服務器已準備好接收解密結果
+                # 在發送 JSON 數據之前添加一個短暫的延遲
                 time.sleep(0.5)
                 
-                # 發送解密結果
-                solution_data = json.dumps({"message": final_message})
-                s.sendall(solution_data.encode())
+                # 發送解密後的訊息
+                solution_data = json.dumps({
+                    "message": final_message
+                }).encode()
+                s.sendall(solution_data)
                 
-                # 接收服務器回應
-                verification_response = s.recv(1024)
-                verification_result = json.loads(verification_response.decode())
-                
-                if verification_result["status"] == "success":
-                    print_success("\n✅ " + verification_result["message"])
-                    print_success("\n你已成功完成所有挑戰，解鎖了隱藏的真相！")
-                    print_hint("\n這次任務展示了現代密碼學的三個核心概念：")
-                    print_hint("1. 對稱加密 (AES-GCM) - 高效加密大量數據")
-                    print_hint("2. 非對稱加密與數位簽章 (RSA) - 安全的身份驗證")
-                    print_hint("3. 混合加密與金鑰管理 - 結合兩者優勢的實用系統")
+                try:
+                    # 接收服務器回應
+                    verification_response = s.recv(1024).decode()
+                    verification_result = json.loads(verification_response)
                     
-                    # 詢問是否進入第四關
-                    print_subtitle("進階挑戰")
-                    print_hint("恭喜你完成了基本挑戰！你想要挑戰更高難度的第四關嗎？")
-                    print_hint("第四關將測試你對 PKI (公鑰基礎設施) 和憑證鏈的理解。")
-                    
-                    next_level = input("\n是否進入第四關？(y/n): ")
-                    
-                    if next_level.lower() == 'y':
+                    if verification_result["status"] == "success":
+                        print_success("\n✅ " + verification_result["message"])
+                        
                         # === 第四關：憑證鏈偽造 ===
-                        print_title("第四關：憑證鏈偽造")
-                        slow_print("\n🔒 歡迎來到最終挑戰：PKI 與憑證鏈偽造", 0.03)
-                        slow_print("在這一關，你將需要理解 X.509 憑證鏈的工作原理，並創建一個有效的憑證鏈。", 0.03)
-                        slow_print("這是現代 TLS/SSL 安全通訊的基礎技術。", 0.03)
+                        print_title("進入最終關卡")
+                        slow_print("\n🔒 恭喜你解開了第三關的謎題！但這還不是最終挑戰...", 0.03)
+                        slow_print("根據解密的訊息，最後一道防線是 PKI 系統 - 公鑰基礎設施。", 0.03)
+                        slow_print("你需要偽造一條完整的憑證鏈，以獲取最終的機密資料。", 0.03)
                         
-                        print_hint("\n💡 任務說明：")
-                        print_hint("1. 你將獲得一個根 CA 憑證和私鑰")
-                        print_hint("2. 你需要使用根 CA 私鑰創建一個中繼 CA 憑證")
-                        print_hint("3. 再使用中繼 CA 私鑰創建一個用戶憑證")
-                        print_hint("4. 最後將完整的憑證鏈提交給服務器驗證")
+                        print_subtitle("第四關：憑證鏈偽造")
+                        print_hint("\n這是最後的挑戰，需要你理解 X.509 憑證和信任鏈的概念。")
+                        print_hint("在 PKI 系統中，信任是通過憑證鏈建立的：")
+                        print_hint("  根 CA (最高信任) → 中繼 CA → 使用者憑證")
                         
-                        # 提示玩家使用憑證鏈偽造工具
-                        print_subtitle("憑證鏈偽造工具")
-                        print_hint("我們提供了一個工具來幫助你完成這個任務。")
-                        run_cert_forge_tool()
+                        input("\n按下 Enter 鍵開始最終挑戰...")
                         
-                        print_subtitle("完成第四關")
-                        print_hint("使用 cert_forge.py 工具完成憑證鏈創建後，你將獲得最終獎勵。")
-                        print_hint("這個工具會幫助你理解 PKI 的核心概念：信任鏈和憑證授權。")
-                        
-                        input("\n按下 Enter 鍵結束任務...")
+                        while True:  # 添加循環，允許多次嘗試
+                            try:
+                                # 關閉舊連接並創建新連接
+                                s.close()
+                                s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                                s.connect(("localhost", 12347))
+                                
+                                # 請求第四關數據
+                                s.sendall(b"START_LEVEL_4")
+                                level4_data_raw = s.recv(16384)  # 增大緩衝區以接收較大的憑證數據
+                                level4_data = json.loads(level4_data_raw.decode())
+                                
+                                print_subtitle("收到的憑證挑戰")
+                                print("\n📜 從服務器獲取了根 CA 憑證和私鑰：")
+                                print_hint("\n你的任務是：")
+                                print_hint("1. 使用提供的根 CA 私鑰創建一個中繼 CA 憑證")
+                                print_hint("2. 使用中繼 CA 創建一個用戶憑證")
+                                print_hint("3. 提交完整的憑證鏈給服務器驗證")
+                                
+                                # 確保 tools/certs 目錄存在
+                                cert_dir = ensure_cert_directory()
+                                
+                                # 保存根 CA 憑證和私鑰到 tools/certs 目錄
+                                with open(os.path.join(cert_dir, "root_ca.pem"), "w") as f:
+                                    f.write(level4_data["root_cert"])
+                                with open(os.path.join(cert_dir, "root_private_key.pem"), "w") as f:
+                                    f.write(level4_data["root_private_key"])
+                                
+                                print_success("\n✅ 已將根 CA 憑證和私鑰保存到 tools/certs 目錄")
+                                print_hint("現在你可以使用憑證創建工具來完成這個挑戰")
+                                
+                                run_cert_creator()
+                                
+                                print_subtitle("提交憑證鏈")
+                                print_hint("完成憑證鏈創建後，請確認你有以下三個文件：")
+                                print_hint("1. tools/certs/root_ca.pem - 根 CA 憑證")
+                                print_hint("2. tools/certs/intermediate_ca.pem - 中繼 CA 憑證")
+                                print_hint("3. tools/certs/user_cert.pem - 用戶憑證")
+                                print_hint("或者在當前目錄中的相同文件")
+                                
+                                ready = input("\n確認要提交憑證請按Enter")
+                                
+                                try:
+                                    # 嘗試從 tools/certs 目錄讀取
+                                    cert_paths = {
+                                        "root_ca": os.path.join(cert_dir, "root_ca.pem"),
+                                        "intermediate_ca": os.path.join(cert_dir, "intermediate_ca.pem"),
+                                        "user_cert": os.path.join(cert_dir, "user_cert.pem")
+                                    }
+                                    
+                                    # 如果 tools/certs 目錄中的文件不存在，則嘗試從當前目錄讀取
+                                    if not os.path.exists(cert_paths["intermediate_ca"]):
+                                        cert_paths["intermediate_ca"] = "intermediate_ca.pem"
+                                    if not os.path.exists(cert_paths["user_cert"]):
+                                        cert_paths["user_cert"] = "user_cert.pem"
+                                    
+                                    # 讀取憑證文件
+                                    with open(cert_paths["root_ca"], "r") as f:
+                                        root_cert = f.read()
+                                    with open(cert_paths["intermediate_ca"], "r") as f:
+                                        intermediate_cert = f.read()
+                                    with open(cert_paths["user_cert"], "r") as f:
+                                        user_cert = f.read()
+                                    
+                                    # 構建憑證鏈數據
+                                    cert_chain = {
+                                        "root_cert": root_cert,
+                                        "intermediate_cert": intermediate_cert,
+                                        "user_cert": user_cert
+                                    }
+                                    
+                                    # 發送憑證鏈到服務器
+                                    print("正在提交憑證鏈到服務器...")
+
+                                    try:
+                                        s.close()
+                                    except:
+                                        pass
+
+                                    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                                    s.connect(("localhost", 12347))
+
+                                    s.sendall(b"VERIFY_CERT_CHAIN")
+
+                                    
+                                    # 添加短暫延遲，確保服務器準備好接收數據
+                                    time.sleep(0.5)
+                                    
+                                    s.sendall(json.dumps(cert_chain).encode())
+                                    
+                                    # 接收驗證結果
+                                    verification_result = json.loads(s.recv(4096).decode())
+                                    if verification_result["status"] == "success":
+                                        print_title("任務完成")
+                                        print_success("\n🎉 恭喜！你成功偽造了有效的憑證鏈並通過了最終挑戰！")
+                                        print_success("\n" + verification_result["message"])
+                                        if "final_secret" in verification_result:
+                                            print_subtitle("最終機密")
+                                            print("\n" + verification_result["final_secret"])
+                                            print_hint("\n這次任務展示了現代密碼學和網路安全的四個重要概念：")
+                                            print_hint("1. 對稱加密 (AES-GCM) - 高效加密大量數據")
+                                            print_hint("2. 非對稱加密與數位簽章 (RSA) - 安全的身份驗證")
+                                            print_hint("3. 混合加密與金鑰管理 - 結合兩者優勢的實用系統")
+                                            print_hint("4. PKI 與憑證鏈 - 建立網路信任的基礎")
+                                        break 
+                                    else:
+                                        print_error("\n❌ " + verification_result["message"])
+                                        print_hint("請檢查你的憑證鏈是否符合要求。")
+                                        os.system("pause")
+                                except FileNotFoundError as e:
+                                    print_error(f"\n❌ 找不到必要的憑證文件：{str(e)}")
+                                    print_hint("請確保你已經使用憑證創建工具生成了所有必要的憑證文件。")
+                                    print_hint(f"工具應該在 tools/certs 目錄或當前目錄中生成這些文件。")
+                                    os.system("pause")
+                                except Exception as e:
+                                    print_error(f"\n❌ 提交憑證鏈時發生錯誤：{str(e)}")
+                                    os.system("pause")
+                            except ConnectionError as e:
+                                print_error(f"\n❌ 連接服務器時發生錯誤：{str(e)}")
+                                os.system("pause")
+                            except Exception as e:
+                                print_error(f"\n❌ 發生未知錯誤：{str(e)}")
+                                os.system("pause")
                     else:
-                        print_success("\n感謝你完成基本挑戰！你已經掌握了現代密碼學的核心概念。")
-                else:
-                    print_error("\n❌ " + verification_result["message"])
+                        print_error("\n❌ " + verification_result["message"])
+                        print_hint("請確認你輸入的解密訊息是否正確，並重新嘗試。")
+                except json.JSONDecodeError:
+                    print_error("\n❌ 無法解析服務器回應，可能是通信協議問題。")
+                    print_hint("嘗試重新連接服務器...")
+                    
+                    # 嘗試直接進入第四關
+                    print_subtitle("嘗試直接進入第四關")
+                    print_hint("由於第三關驗證出現問題，我們將直接嘗試進入第四關...")
+                    
+                    # 關閉舊連接並創建新連接
+                    s.close()
+                    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                    s.connect(("localhost", 12347))
+                    
+                    # 請求第四關數據
+                    s.sendall(b"START_LEVEL_4")
+                    try:
+                        level4_data_raw = s.recv(16384) 
+                        level4_data = json.loads(level4_data_raw.decode())
+                        
+                        cert_dir = ensure_cert_directory()
+                        
+                        with open(os.path.join(cert_dir, "root_ca.pem"), "w") as f:
+                            f.write(level4_data["root_cert"])
+                        with open(os.path.join(cert_dir, "root_private_key.pem"), "w") as f:
+                            f.write(level4_data["root_private_key"])
+                        
+                        
+                        print_subtitle("收到的憑證挑戰")
+                        print("\n📜 從服務器獲取了根 CA 憑證和私鑰：")
+                        print_hint("\n你的任務是：")
+                        print_hint("1. 使用提供的根 CA 私鑰創建一個中繼 CA 憑證")
+                        print_hint("2. 使用中繼 CA 創建一個用戶憑證")
+                        print_hint("3. 提交完整的憑證鏈給服務器驗證")
+
+                    except Exception as e:
+                        print_error(f"\n❌ 無法進入第四關：{str(e)}")
+                        print_hint("請重新啟動遊戲並嘗試。")
+                        os.system("pause")
             else:
                 print_error("\n❌ 解密最終訊息失敗")
                 print_hint("請確認你輸入的 AES 金鑰是否正確。")
+                os.system("pause")
         except Exception as e:
             print_error(f"\n解密過程發生錯誤：{str(e)}")
             print_hint("請確認你輸入的 AES 金鑰格式正確，並重新嘗試。")
+            os.system("pause")
     else:
         print_title("任務失敗")
         print_error("\n⚠️ 驗證失敗，訊息可能被竄改或不是來自可信的發送者。")
         print_hint("\n💡 提示：確保你使用的是完整的公鑰，包括開頭的 '-----BEGIN PUBLIC KEY-----' 和結尾的 '-----END PUBLIC KEY-----'。")
+        os.system("pause")
 
     print("\n🔚 任務結束，感謝你的參與。")
     
 except ConnectionRefusedError:
     print_error("\n無法連接到伺服器，請確認伺服器已啟動。")
+    os.system("pause")
+
 except Exception as e:
     print_error(f"\n發生錯誤：{str(e)}")
+    os.system("pause")
+
 finally:
-    # 確保在程式結束時關閉連接
     try:
         s.close()
     except:
         pass
+
+    for temp_file in ["root_ca.pem", "root_private_key.pem"]:
+        if os.path.exists(temp_file):
+            try:
+                os.remove(temp_file)
+            except:
+                pass
+    
     print("\n按下 Enter 鍵結束遊戲...")
     input()

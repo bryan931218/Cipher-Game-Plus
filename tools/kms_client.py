@@ -102,8 +102,8 @@ def authenticate_with_kms():
                 else:
                     print_error(f"❌ 身份驗證失敗：{kms_response['message']}")
                     print_explanation("請檢查你的用戶名和驗證 Token 是否正確。")
-                    os.system("pause")
-                    os.system("cls")
+                    os.system("pause" if os.name == "nt" else "read -p '按下 Enter 繼續...' var")
+                    os.system("cls" if os.name == "nt" else "clear")
                     
         except ConnectionRefusedError:
             print_error("\n無法連接到 KMS 服務，請確認伺服器已啟動。")
@@ -115,7 +115,7 @@ def authenticate_with_kms():
                 break
 
 # 主程式
-authenticate_with_kms()
-
-print("\n程式結束")
-os.system("pause" if os.name == "nt" else "read -p '按下 Enter 繼續...' var")
+if __name__ == "__main__":
+    authenticate_with_kms()
+    print("\n程式結束")
+    os.system("pause" if os.name == "nt" else "read -p '按下 Enter 繼續...' var")

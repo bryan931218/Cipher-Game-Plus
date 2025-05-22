@@ -74,7 +74,7 @@ def generate_root_ca():
     ])
     
     # 設定憑證有效期
-    now = datetime.datetime.utcnow()
+    now = datetime.datetime.now()
     cert = x509.CertificateBuilder().subject_name(
         subject
     ).issuer_name(
@@ -161,7 +161,7 @@ def verify_certificate_chain(cert_chain, root_cert):
             return False
         
         # 檢查憑證有效期
-        now = datetime.datetime.utcnow()
+        now = datetime.datetime.now()
         for cert, name in [(user_cert, "用戶憑證"), (intermediate_cert, "中繼憑證"), (root_cert, "根憑證")]:
             if now < cert.not_valid_before or now > cert.not_valid_after:
                 print(f"{name}已過期或尚未生效")
@@ -215,7 +215,7 @@ def handle_client(conn, addr, game_data):
                 # 發送最終獎勵
                 final_reward = {
                     "status": "success",
-                    "message": "恭喜！你已成功完成所有挑戰，包括憑證鏈偽造！",
+                    "message": "恭喜！你已成功完成所有挑戰！",
                     "final_secret": game_data["final_secret"]
                 }
                 conn.sendall(json.dumps(final_reward).encode())
@@ -273,7 +273,7 @@ def handle_client(conn, addr, game_data):
                 "ciphertext": base64.b64encode(game_data["final_ciphertext"]).decode()
             }
             conn.sendall(json.dumps(level3_data).encode())
-            print(f"已發送第三關數據給玩家 {addr}，玩家需要使用 KMS 客戶端工具獲取金鑰。")
+            print(f"已發送第三關數據給玩家 {addr}")
             
         elif initial_request == "VERIFY_FINAL_SOLUTION":
             # 接收客戶端提交的最終解密訊息
@@ -287,7 +287,7 @@ def handle_client(conn, addr, game_data):
                 print(f"玩家 {addr} 成功解密最終訊息")
                 conn.sendall(json.dumps({
                     "status": "success",
-                    "message": "恭喜！你已成功完成所有挑戰！",
+                    "message": "恭喜！你已成功解密訊息。",
                     "next_level": "第四關：憑證鏈偽造挑戰"
                 }).encode())
             else:
@@ -320,7 +320,7 @@ def handle_client(conn, addr, game_data):
                 }).encode()
                 conn.sendall(payload)
 
-                print(f"資料傳送完成給玩家 {addr}，等待玩家進入第三關...")
+                print(f"資料傳送完成給玩家 {addr}")
         
         else:
             print(f"玩家 {addr} 發送了未知請求: {initial_request}")
@@ -364,7 +364,7 @@ def main():
     # 生成一個隨機的AES金鑰用於第三關
     aes_key = os.urandom(32)
     aes_nonce = os.urandom(12)
-    final_message = "恭喜你完成了所有挑戰！你已經掌握了現代密碼學的三個核心概念：對稱加密、非對稱加密與數位簽章、以及混合加密與金鑰管理。這些技術是保護數位世界安全的基石。"
+    final_message = "恭喜你完成了挑戰！你已經掌握了現代密碼學的核心概念：對稱加密、非對稱加密與數位簽章、以及混合加密與金鑰管理。"
 
     # 使用AES-GCM加密最終訊息
     aesgcm = AESGCM(aes_key)
@@ -377,7 +377,7 @@ def main():
     root_ca = generate_root_ca()
     
     # 第四關的最終獎勵
-    final_secret = "你已經成功掌握了PKI和憑證鏈的概念，這是現代安全通訊的基礎。恭喜你完成了所有挑戰！"
+    final_secret = "我愛密碼工程"
 
     # 將所有遊戲數據打包到一個字典中
     game_data = {
