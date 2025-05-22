@@ -364,7 +364,7 @@ def main():
     # 生成一個隨機的AES金鑰用於第三關
     aes_key = os.urandom(32)
     aes_nonce = os.urandom(12)
-    final_message = "恭喜你完成了挑戰！你已經掌握了現代密碼學的核心概念：對稱加密、非對稱加密與數位簽章、以及混合加密與金鑰管理。"
+    final_message = "挑戰還沒結束"
 
     # 使用AES-GCM加密最終訊息
     aesgcm = AESGCM(aes_key)
