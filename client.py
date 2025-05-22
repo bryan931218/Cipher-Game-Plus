@@ -11,6 +11,10 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.exceptions import InvalidSignature
 
+# === 評分系統變數 ===
+player_score = 100  # 初始分數為100分
+score_deductions = []  # 用於記錄扣分原因
+
 # === 顯示效果函數 ===
 def clear():
     os.system('cls' if os.name == 'nt' else 'clear')
@@ -97,6 +101,7 @@ def display_available_tools():
         print_tool_info(f"  讀取工具列表時發生錯誤: {str(e)}")
 
 def decrypt_message(password: str, data: dict):
+    global player_score, score_deductions
     try:
         salt = base64.b64decode(data['salt'])
         nonce = base64.b64decode(data['nonce'])
@@ -133,7 +138,7 @@ def decrypt_message(password: str, data: dict):
         print("  衍生完成！")
         print("  金鑰 (十六進位)：", key.hex())
         print("  金鑰 (Base64)：", base64.b64encode(key).decode())
-
+        
         print("\n[步驟6] 使用 AES-GCM 解密")
         print("  正在初始化 AES-GCM 引擎...")
         time.sleep(0.3)
@@ -148,15 +153,19 @@ def decrypt_message(password: str, data: dict):
         return result
     except Exception as e:
         print("\n[錯誤] 解密失敗：", str(e))
+        # 第一關密碼解密失敗時扣分
+        player_score -= 5
+        score_deductions.append("第一關密碼解密失敗 (-5)")
         return None
 
 def verify_signature(public_key_pem: str, message: str, signature_b64: str) -> bool:
+    global player_score, score_deductions
     try:
         print_subtitle("簽章驗證過程")
         print("\033[1m\033[96m[步驟1]\033[0m 載入公鑰")
         print("  正在解析 PEM 格式公鑰...")
         time.sleep(0.5)
-        
+                
         public_key = serialization.load_pem_public_key(public_key_pem.encode())
         print("  公鑰載入成功！")
         
@@ -178,13 +187,20 @@ def verify_signature(public_key_pem: str, message: str, signature_b64: str) -> b
         )
         return True
     except InvalidSignature:
+        # 第二關簽章驗證失敗時扣分
+        player_score -= 5
+        score_deductions.append("第二關簽章驗證失敗 (-5)")
         return False
     except Exception as e:
         print_error(f"\n[錯誤] 驗證過程發生錯誤：{str(e)}")
+        # 其他錯誤也扣分
+        player_score -= 5
+        score_deductions.append("第二關驗證過程發生錯誤 (-5)")
         return False
 
 def decrypt_aes_gcm(key: bytes, nonce: bytes, ciphertext: bytes) -> str:
     """使用 AES-GCM 解密數據"""
+    global player_score, score_deductions
     try:
         print_subtitle("AES-GCM 解密過程")
         print("\033[1m\033[96m[步驟1]\033[0m 初始化 AES-GCM")
@@ -208,6 +224,9 @@ def decrypt_aes_gcm(key: bytes, nonce: bytes, ciphertext: bytes) -> str:
         return result
     except Exception as e:
         print_error(f"\n[錯誤] AES-GCM 解密失敗：{str(e)}")
+        # 第三關 AES 金鑰解密失敗時扣分
+        player_score -= 5
+        score_deductions.append("第三關 AES 解密失敗 (-5)")
         return None
 
 def run_kms_client():
@@ -318,7 +337,7 @@ try:
             print_error("\n⚠️ 驗證失敗，訊息可能被竄改或不是來自可信的發送者。")
             print_hint("\n💡 提示：確保你使用的是完整的公鑰，包括開頭的 '-----BEGIN PUBLIC KEY-----' 和結尾的 '-----END PUBLIC KEY-----'。")
             os.system("pause")
-    
+
     # 驗證成功後繼續進入第三關
     print_title("進入第三關")
     slow_print("\n🔐 恭喜你通過前兩關挑戰！解密線索指向了第三關：混合加密與金鑰管理。", 0.03)
@@ -365,13 +384,12 @@ try:
         print_hint("請輸入 KMS 服務提供的 AES 金鑰：")
         
         aes_key_b64 = input("\nAES 金鑰 (Base64 格式): ")
-        
         try:
             # 解碼 Base64 數據
             aes_key = base64.b64decode(aes_key_b64)
             nonce = base64.b64decode(nonce_b64)
             ciphertext = base64.b64decode(ciphertext_b64)
-            
+    
             # 使用 AES 金鑰解密最終訊息
             print_subtitle("解密最終訊息")
             print("正在使用獲取的 AES 金鑰解密最終訊息...")
@@ -532,26 +550,44 @@ try:
                                     else:
                                         print_error("\n❌ " + verification_result["message"])
                                         print_hint("請檢查你的憑證鏈是否符合要求。")
+                                        # 第四關憑證鏈驗證失敗時扣分
+                                        player_score -= 5
+                                        score_deductions.append("第四關憑證鏈驗證失敗 (-5)")
                                         os.system("pause")
                                 except FileNotFoundError as e:
                                     print_error(f"\n❌ 找不到必要的憑證文件：{str(e)}")
                                     print_hint("請確保你已經使用憑證創建工具生成了所有必要的憑證文件。")
                                     print_hint(f"工具應該在 tools/certs 目錄或當前目錄中生成這些文件。")
+                                    # 第四關憑證文件找不到時扣分
+                                    player_score -= 5
+                                    score_deductions.append("第四關找不到必要的憑證文件 (-5)")
                                     os.system("pause")
                                 except Exception as e:
                                     print_error(f"\n❌ 提交憑證鏈時發生錯誤：{str(e)}")
+                                    # 其他錯誤也扣分
+                                    player_score -= 3
+                                    score_deductions.append("第四關提交憑證鏈時發生錯誤 (-3)")
                                     os.system("pause")
                             except ConnectionError as e:
                                 print_error(f"\n❌ 連接服務器時發生錯誤：{str(e)}")
+                                # 連接錯誤扣分
+                                player_score -= 2
+                                score_deductions.append("連接服務器時發生錯誤 (-2)")
                                 os.system("pause")
                             except Exception as e:
                                 print_error(f"\n❌ 發生未知錯誤：{str(e)}")
+                                # 未知錯誤扣分
+                                player_score -= 2
+                                score_deductions.append("發生未知錯誤 (-2)")
                                 os.system("pause")
                         # 成功完成第四關，跳出第三關的循環
                         break
                     else:
                         print_error("\n❌ " + verification_result["message"])
                         print_hint("請確認你輸入的解密訊息是否正確，並重新嘗試。")
+                        # 第三關驗證解密結果失敗時扣分
+                        player_score -= 5
+                        score_deductions.append("第三關解密訊息驗證失敗 (-5)")
                         # 驗證失敗，但不跳出循環，讓用戶可以重新嘗試
                 except json.JSONDecodeError:
                     print_error("\n❌ 無法解析服務器回應，可能是通信協議問題。")
@@ -602,6 +638,24 @@ try:
             print_hint("請確認你輸入的 AES 金鑰格式正確，並重新嘗試。")
             # 發生錯誤，但不跳出循環，讓用戶可以重新嘗試
 
+    # 在遊戲結束時顯示最終分數
+    print_title("最終評分")
+    print(f"你的最終分數是: {player_score}/100")
+
+    if len(score_deductions) > 0:
+        print_subtitle("扣分項目:")
+        for deduction in score_deductions:
+            print_error(f"• {deduction}")
+
+    if player_score >= 90:
+        print_success("\n🏆 傑出的表現！你是密碼學專家！")
+    elif player_score >= 80:
+        print_success("\n👍 很好的表現！你對密碼學有很好的理解。")
+    elif player_score >= 70:
+        print_hint("\n👌 不錯的表現，但還有提升空間。")
+    else:
+        print_hint("\n🔄 建議再多練習密碼學的基本概念。")
+
     print("\n🔚 任務結束，感謝你的參與。")
     
 except ConnectionRefusedError:
@@ -624,6 +678,5 @@ finally:
                 os.remove(temp_file)
             except:
                 pass
-    
     print("\n按下 Enter 鍵結束遊戲...")
     input()
